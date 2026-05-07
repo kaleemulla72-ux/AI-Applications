@@ -1,0 +1,15 @@
+{
+  "name": "linaz-beauty-parlour",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mobile-first beauty parlour booking app with AI receptionist and admin dashboard.",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
