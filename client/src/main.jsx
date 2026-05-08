@@ -5,6 +5,7 @@ import {
   Check,
   Clock,
   Pencil,
+  Trash2,
   Instagram,
   LayoutDashboard,
   MessageCircle,
@@ -22,10 +23,15 @@ const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname
 const API_URL = import.meta.env.VITE_API_URL
   || (isLocalHost ? 'http://localhost:5050' : `${window.location.protocol}//${window.location.hostname}:5050`);
 
+function createSessionId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 async function api(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
+    ...options,
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Request failed');
@@ -193,7 +199,7 @@ function ChatWidget({ services }) {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hi, I can help with service prices, packages, and bookings. What would you like today?' }
   ]);
-  const sessionId = useMemo(() => crypto.randomUUID(), []);
+  const sessionId = useMemo(() => createSessionId(), []);
 
   async function sendMessage(event) {
     event.preventDefault();
@@ -241,20 +247,21 @@ function ChatWidget({ services }) {
 }
 
 function AdminApp({ onHome }) {
-  const [loggedIn, setLoggedIn] = useState(localStorage.getItem('admin-ok') === 'true');
-  return loggedIn ? <Dashboard onHome={onHome} /> : <AdminLogin onLogin={() => setLoggedIn(true)} onHome={onHome} />;
+  const [adminToken, setAdminToken] = useState('');
+  return adminToken
+    ? <Dashboard adminToken={adminToken} onHome={onHome} onLogout={() => setAdminToken('')} />
+    : <AdminLogin onLogin={setAdminToken} onHome={onHome} />;
 }
 
 function AdminLogin({ onLogin, onHome }) {
-  const [form, setForm] = useState({ username: 'admin', password: 'admin123' });
+  const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
 
   async function submit(event) {
     event.preventDefault();
     try {
-      await api('/admin/login', { method: 'POST', body: JSON.stringify(form) });
-      localStorage.setItem('admin-ok', 'true');
-      onLogin();
+      const result = await api('/admin/login', { method: 'POST', body: JSON.stringify(form) });
+      onLogin(result.token);
     } catch (err) {
       setError(err.message);
     }
@@ -275,22 +282,39 @@ function AdminLogin({ onLogin, onHome }) {
   );
 }
 
-function Dashboard({ onHome }) {
+function Dashboard({ adminToken, onHome, onLogout }) {
+  const settingFields = ['parlour_name', 'phone_number', 'whatsapp_link', 'instagram_link', 'address', 'opening_hours'];
   const [appointments, setAppointments] = useState([]);
   const [summary, setSummary] = useState(null);
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [settingsDraft, setSettingsDraft] = useState(null);
   const [newService, setNewService] = useState({ name: '', price: '', duration: '', description: '' });
   const [editingService, setEditingService] = useState(null);
   const [newStaff, setNewStaff] = useState({ name: '', role: '', phone: '' });
   const [tab, setTab] = useState('all');
+  const [adminNotice, setAdminNotice] = useState('');
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
+  const adminApi = (path, options = {}) => api(path, {
+    ...options,
+    headers: { Authorization: `Bearer ${adminToken}`, ...(options.headers || {}) }
+  });
+
+  function handleAdminError(error) {
+    if (error.message === 'Admin login required.') {
+      onLogout();
+      return;
+    }
+    setAdminNotice(error.message);
+  }
 
   const load = () => Promise.all([
-    api(`/appointments${tab === 'today' ? '?today=true' : ''}`),
-    api('/dashboard/summary'),
+    adminApi(`/appointments${tab === 'today' ? '?today=true' : ''}`),
+    adminApi('/dashboard/summary'),
     api('/services'),
-    api('/staff'),
+    adminApi('/staff'),
     api('/business-settings')
   ]).then(([appointmentData, summaryData, serviceData, staffData, settingData]) => {
     setAppointments(appointmentData);
@@ -298,22 +322,39 @@ function Dashboard({ onHome }) {
     setServices(serviceData);
     setStaff(staffData);
     setSettings(settingData);
+    setSettingsDraft(settingData);
   });
 
   useEffect(() => {
-    load();
+    load().catch(handleAdminError);
   }, [tab]);
 
   async function updateStatus(id, status) {
-    await api(`/appointments/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
-    await load();
+    try {
+      await adminApi(`/appointments/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    }
   }
 
   async function addService(event) {
     event.preventDefault();
-    await api('/services', { method: 'POST', body: JSON.stringify(newService) });
-    setNewService({ name: '', price: '', duration: '', description: '' });
-    await load();
+    try {
+      const formData = new FormData(event.currentTarget);
+      const payload = {
+        name: formData.get('name') || '',
+        price: formData.get('price') || '',
+        duration: formData.get('duration') || '',
+        description: formData.get('description') || ''
+      };
+      const service = await adminApi('/services', { method: 'POST', body: JSON.stringify(payload) });
+      setNewService({ name: '', price: '', duration: '', description: '' });
+      setAdminNotice(`Service added: ${service.name}`);
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    }
   }
 
   function startEditService(service) {
@@ -328,32 +369,82 @@ function Dashboard({ onHome }) {
 
   async function updateService(event) {
     event.preventDefault();
-    await api(`/services/${editingService.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(editingService)
-    });
-    setEditingService(null);
-    await load();
+    try {
+      const formData = new FormData(event.currentTarget);
+      const payload = {
+        name: formData.get('name') || '',
+        price: formData.get('price') || '',
+        duration: formData.get('duration') || '',
+        description: formData.get('description') || ''
+      };
+      await adminApi(`/services/${editingService.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      setAdminNotice(`Service updated: ${payload.name}`);
+      setEditingService(null);
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    }
+  }
+
+  async function deleteService(service) {
+    if (!window.confirm(`Delete ${service.name}? Existing appointments will stay in history.`)) return;
+    try {
+      const result = await adminApi(`/services/${service.id}`, { method: 'DELETE' });
+      setAdminNotice(`Service deleted: ${result.name}`);
+      if (editingService?.id === service.id) setEditingService(null);
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    }
   }
 
   async function addStaff(event) {
     event.preventDefault();
-    await api('/staff', { method: 'POST', body: JSON.stringify(newStaff) });
-    setNewStaff({ name: '', role: '', phone: '' });
-    await load();
+    try {
+      const formData = new FormData(event.currentTarget);
+      const payload = {
+        name: formData.get('name') || '',
+        role: formData.get('role') || '',
+        phone: formData.get('phone') || ''
+      };
+      const staffMember = await adminApi('/staff', { method: 'POST', body: JSON.stringify(payload) });
+      setNewStaff({ name: '', role: '', phone: '' });
+      setAdminNotice(`Staff added: ${staffMember.name}`);
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    }
   }
 
   async function saveSettings(event) {
     event.preventDefault();
-    await api('/business-settings', { method: 'PATCH', body: JSON.stringify(settings) });
-    await load();
+    setSettingsSaving(true);
+    setAdminNotice('Saving settings...');
+    try {
+      const formData = new FormData(event.currentTarget);
+      const payload = Object.fromEntries(settingFields.map((key) => [key, formData.get(key) || '']));
+      const savedSettings = await adminApi('/business-settings', { method: 'PATCH', body: JSON.stringify(payload) });
+      setSettings(savedSettings);
+      setSettingsDraft(savedSettings);
+      setAdminNotice(`Settings saved: ${savedSettings.address}`);
+    } catch (error) {
+      handleAdminError(error);
+    } finally {
+      setSettingsSaving(false);
+    }
   }
 
   return (
     <div className="dashboard">
       <header className="dashboard-header">
         <div><p className="eyebrow">Owner</p><h1>Admin Dashboard</h1></div>
-        <button className="ghost-button" onClick={onHome}>Customer Site</button>
+        <div className="form-actions">
+          <button className="ghost-button" onClick={onLogout}>Logout</button>
+          <button className="ghost-button" onClick={onHome}>Customer Site</button>
+        </div>
       </header>
 
       <section className="summary-grid">
@@ -362,6 +453,8 @@ function Dashboard({ onHome }) {
         <SummaryCard label="Revenue" value={`₹${summary?.expectedRevenue || 0}`} />
         <SummaryCard label="Cancelled" value={summary?.cancelledBookings || 0} />
       </section>
+
+      {adminNotice && <p className="notice">{adminNotice}</p>}
 
       <section className="admin-section">
         <div className="tabs">
@@ -391,11 +484,11 @@ function Dashboard({ onHome }) {
       <section className="admin-columns">
         <form className="admin-form" onSubmit={addService}>
           <h2>Manage Services</h2>
-          <input required placeholder="Service name" value={newService.name} onChange={(event) => setNewService({ ...newService, name: event.target.value })} />
-          <input required type="number" placeholder="Price" value={newService.price} onChange={(event) => setNewService({ ...newService, price: event.target.value })} />
-          <input required type="number" placeholder="Duration minutes" value={newService.duration} onChange={(event) => setNewService({ ...newService, duration: event.target.value })} />
-          <textarea required placeholder="Description" value={newService.description} onChange={(event) => setNewService({ ...newService, description: event.target.value })} />
-          <button><Plus size={17} /> Add Service</button>
+          <input required name="name" placeholder="Service name" value={newService.name} onChange={(event) => setNewService({ ...newService, name: event.target.value })} />
+          <input required name="price" type="number" placeholder="Price" value={newService.price} onChange={(event) => setNewService({ ...newService, price: event.target.value })} />
+          <input required name="duration" type="number" placeholder="Duration minutes" value={newService.duration} onChange={(event) => setNewService({ ...newService, duration: event.target.value })} />
+          <textarea required name="description" placeholder="Description" value={newService.description} onChange={(event) => setNewService({ ...newService, description: event.target.value })} />
+          <button type="submit"><Plus size={17} /> Add Service</button>
         </form>
 
         <form className="admin-form" onSubmit={editingService ? updateService : (event) => event.preventDefault()}>
@@ -403,18 +496,23 @@ function Dashboard({ onHome }) {
           {!editingService ? (
             <div className="service-edit-list">
               {services.map((service) => (
-                <button className="service-edit-button" type="button" key={service.id} onClick={() => startEditService(service)}>
-                  <span>{service.name} - Rs.{service.price}</span>
-                  <Pencil size={16} />
-                </button>
+                <div className="service-edit-row" key={service.id}>
+                  <button className="service-edit-button" type="button" onClick={() => startEditService(service)}>
+                    <span>{service.name} - Rs.{service.price}</span>
+                    <Pencil size={16} />
+                  </button>
+                  <button className="icon-danger-button" type="button" aria-label={`Delete ${service.name}`} onClick={() => deleteService(service)}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
             <>
-              <input required placeholder="Service name" value={editingService.name} onChange={(event) => setEditingService({ ...editingService, name: event.target.value })} />
-              <input required type="number" placeholder="Price" value={editingService.price} onChange={(event) => setEditingService({ ...editingService, price: event.target.value })} />
-              <input required type="number" placeholder="Duration minutes" value={editingService.duration} onChange={(event) => setEditingService({ ...editingService, duration: event.target.value })} />
-              <textarea required placeholder="Description" value={editingService.description} onChange={(event) => setEditingService({ ...editingService, description: event.target.value })} />
+              <input required name="name" placeholder="Service name" value={editingService.name} onChange={(event) => setEditingService({ ...editingService, name: event.target.value })} />
+              <input required name="price" type="number" placeholder="Price" value={editingService.price} onChange={(event) => setEditingService({ ...editingService, price: event.target.value })} />
+              <input required name="duration" type="number" placeholder="Duration minutes" value={editingService.duration} onChange={(event) => setEditingService({ ...editingService, duration: event.target.value })} />
+              <textarea required name="description" placeholder="Description" value={editingService.description} onChange={(event) => setEditingService({ ...editingService, description: event.target.value })} />
               <div className="form-actions">
                 <button type="submit"><Check size={17} /> Save Changes</button>
                 <button className="ghost-button" type="button" onClick={() => setEditingService(null)}><X size={17} /> Cancel</button>
@@ -425,23 +523,29 @@ function Dashboard({ onHome }) {
 
         <form className="admin-form" onSubmit={addStaff}>
           <h2>Manage Staff</h2>
-          <input required placeholder="Staff name" value={newStaff.name} onChange={(event) => setNewStaff({ ...newStaff, name: event.target.value })} />
-          <input required placeholder="Role" value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value })} />
-          <input placeholder="Phone" value={newStaff.phone} onChange={(event) => setNewStaff({ ...newStaff, phone: event.target.value })} />
-          <button><UserRound size={17} /> Add Staff</button>
+          <input required name="name" placeholder="Staff name" value={newStaff.name} onChange={(event) => setNewStaff({ ...newStaff, name: event.target.value })} />
+          <input required name="role" placeholder="Role" value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value })} />
+          <input name="phone" placeholder="Phone" value={newStaff.phone} onChange={(event) => setNewStaff({ ...newStaff, phone: event.target.value })} />
+          <button type="submit"><UserRound size={17} /> Add Staff</button>
           <div className="mini-list">{staff.map((member) => <span key={member.id}>{member.name} · {member.role}</span>)}</div>
         </form>
       </section>
 
-      {settings && (
+      {settingsDraft && (
         <form className="settings-form" onSubmit={saveSettings}>
           <h2>Business Settings</h2>
-          {['parlour_name', 'phone_number', 'whatsapp_link', 'instagram_link', 'address', 'opening_hours'].map((key) => (
+          {settingFields.map((key) => (
             <label key={key}>{key.replaceAll('_', ' ')}
-              <input value={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: event.target.value })} />
+              {key === 'address' || key === 'opening_hours' ? (
+                <textarea name={key} value={settingsDraft[key] || ''} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value }))} />
+              ) : (
+                <input name={key} value={settingsDraft[key] || ''} onChange={(event) => setSettingsDraft((current) => ({ ...current, [key]: event.target.value }))} />
+              )}
             </label>
           ))}
-          <button className="primary-button">Save Settings</button>
+          <button className="primary-button" type="submit" disabled={settingsSaving}>
+            {settingsSaving ? 'Saving...' : 'Save Settings'}
+          </button>
         </form>
       )}
     </div>

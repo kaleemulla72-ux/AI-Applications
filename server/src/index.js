@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
@@ -14,6 +15,7 @@ const clientDistPath = path.resolve(__dirname, '..', '..', 'client', 'dist');
 
 const app = express();
 const port = process.env.PORT || 5050;
+const adminSessionToken = process.env.ADMIN_SESSION_TOKEN || randomBytes(32).toString('hex');
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
 app.use(express.json());
@@ -22,12 +24,21 @@ function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 }
 
+function requireAdmin(req, res, next) {
+  const authHeader = req.get('authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (token !== adminSessionToken) {
+    return res.status(401).json({ error: 'Admin login required.' });
+  }
+  next();
+}
+
 app.get('/services', asyncHandler(async (_req, res) => {
   const services = await db.all('SELECT * FROM services WHERE active = 1 ORDER BY id');
   res.json(services);
 }));
 
-app.post('/services', asyncHandler(async (req, res) => {
+app.post('/services', requireAdmin, asyncHandler(async (req, res) => {
   const { name, price, duration, description } = req.body;
   if (!name || !price || !duration || !description) {
     return res.status(400).json({ error: 'Name, price, duration, and description are required.' });
@@ -40,7 +51,7 @@ app.post('/services', asyncHandler(async (req, res) => {
   res.status(201).json(service);
 }));
 
-app.patch('/services/:id', asyncHandler(async (req, res) => {
+app.patch('/services/:id', requireAdmin, asyncHandler(async (req, res) => {
   const current = await db.get('SELECT * FROM services WHERE id = ? AND active = 1', [req.params.id]);
   if (!current) return res.status(404).json({ error: 'Service not found.' });
 
@@ -57,7 +68,15 @@ app.patch('/services/:id', asyncHandler(async (req, res) => {
   res.json(service);
 }));
 
-app.get('/appointments', asyncHandler(async (req, res) => {
+app.delete('/services/:id', requireAdmin, asyncHandler(async (req, res) => {
+  const current = await db.get('SELECT * FROM services WHERE id = ? AND active = 1', [req.params.id]);
+  if (!current) return res.status(404).json({ error: 'Service not found.' });
+
+  await db.run('UPDATE services SET active = 0 WHERE id = ?', [req.params.id]);
+  res.json({ ok: true, id: Number(req.params.id), name: current.name });
+}));
+
+app.get('/appointments', requireAdmin, asyncHandler(async (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const where = req.query.today === 'true' ? 'WHERE a.date = ?' : '';
   const params = req.query.today === 'true' ? [today] : [];
@@ -85,7 +104,7 @@ app.post('/appointments', asyncHandler(async (req, res) => {
   res.status(201).json(appointment);
 }));
 
-app.patch('/appointments/:id/status', asyncHandler(async (req, res) => {
+app.patch('/appointments/:id/status', requireAdmin, asyncHandler(async (req, res) => {
   const allowed = ['pending', 'confirmed', 'completed', 'cancelled'];
   if (!allowed.includes(req.body.status)) {
     return res.status(400).json({ error: 'Invalid status.' });
@@ -95,12 +114,12 @@ app.patch('/appointments/:id/status', asyncHandler(async (req, res) => {
   res.json(appointment);
 }));
 
-app.get('/staff', asyncHandler(async (_req, res) => {
+app.get('/staff', requireAdmin, asyncHandler(async (_req, res) => {
   const staff = await db.all('SELECT * FROM staff WHERE active = 1 ORDER BY id');
   res.json(staff);
 }));
 
-app.post('/staff', asyncHandler(async (req, res) => {
+app.post('/staff', requireAdmin, asyncHandler(async (req, res) => {
   const { name, role, phone } = req.body;
   if (!name || !role) return res.status(400).json({ error: 'Name and role are required.' });
   const result = await db.run('INSERT INTO staff (name, role, phone) VALUES (?, ?, ?)', [name, role, phone || null]);
@@ -115,7 +134,7 @@ app.post('/chat/message', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
-app.get('/dashboard/summary', asyncHandler(async (_req, res) => {
+app.get('/dashboard/summary', requireAdmin, asyncHandler(async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const [todayBookings, upcomingBookings, expectedRevenue, cancelledBookings] = await Promise.all([
     db.get("SELECT COUNT(*) as count FROM appointments WHERE date = ? AND status != 'cancelled'", [today]),
@@ -137,24 +156,42 @@ app.get('/business-settings', asyncHandler(async (_req, res) => {
   res.json(await getBusinessSettings());
 }));
 
-app.patch('/business-settings', asyncHandler(async (req, res) => {
+app.patch('/business-settings', requireAdmin, asyncHandler(async (req, res) => {
   const current = await getBusinessSettings();
   const next = { ...current, ...req.body };
+  const required = ['parlour_name', 'phone_number', 'whatsapp_link', 'instagram_link', 'address', 'opening_hours'];
+  if (required.some((key) => !String(next[key] || '').trim())) {
+    return res.status(400).json({ error: 'All business settings fields are required.' });
+  }
+
   await db.run(
     `UPDATE business_settings
      SET parlour_name = ?, phone_number = ?, whatsapp_link = ?, instagram_link = ?,
          address = ?, opening_hours = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = 1`,
-    [next.parlour_name, next.phone_number, next.whatsapp_link, next.instagram_link, next.address, next.opening_hours]
+    [
+      next.parlour_name.trim(),
+      next.phone_number.trim(),
+      next.whatsapp_link.trim(),
+      next.instagram_link.trim(),
+      next.address.trim(),
+      next.opening_hours.trim()
+    ]
   );
   res.json(await getBusinessSettings());
 }));
 
 app.post('/admin/login', (req, res) => {
-  const ok = req.body.username === (process.env.ADMIN_USERNAME || 'admin')
-    && req.body.password === (process.env.ADMIN_PASSWORD || 'admin123');
+  const adminUsername = process.env.ADMIN_USERNAME;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminUsername || !adminPassword) {
+    return res.status(503).json({ error: 'Admin login is not configured.' });
+  }
+
+  const ok = req.body.username === adminUsername
+    && req.body.password === adminPassword;
   if (!ok) return res.status(401).json({ error: 'Invalid admin credentials.' });
-  res.json({ ok: true });
+  res.json({ ok: true, token: adminSessionToken });
 });
 
 app.use(express.static(clientDistPath));

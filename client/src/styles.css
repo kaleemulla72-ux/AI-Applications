@@ -585,6 +585,12 @@ textarea {
   gap: 8px;
 }
 
+.service-edit-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 46px;
+}
+
 .admin-form .service-edit-button {
   align-items: center;
   background: #fff8f6;
@@ -598,6 +604,21 @@ textarea {
   padding: 10px 12px;
   text-align: left;
   width: 100%;
+}
+
+.icon-danger-button {
+  align-items: center;
+  background: #fff1f1;
+  border: 1px solid #f2c7c7;
+  border-radius: 8px;
+  color: #9f2633;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 46px;
+}
+
+.icon-danger-button:hover {
+  background: #ffe3e3;
 }
 
 .form-actions {

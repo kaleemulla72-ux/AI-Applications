@@ -49,9 +49,11 @@ Mobile-first beauty parlour MVP with a React customer website, floating AI chat 
    Copy-Item client/.env.example client/.env
    ```
 
-4. Add your OpenAI key in `server/.env`:
+4. Set your admin password and optionally add your OpenAI key in `server/.env`:
 
    ```env
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=choose-a-private-password
    OPENAI_API_KEY=your_api_key_here
    OPENAI_MODEL=gpt-4o-mini
    ```
@@ -71,14 +73,14 @@ Mobile-first beauty parlour MVP with a React customer website, floating AI chat 
 
 ## Admin Login
 
-Default credentials are configured in `server/.env.example`:
+Admin credentials are configured in your local `server/.env` file:
 
 ```env
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
+ADMIN_PASSWORD=choose-a-private-password
 ```
 
-Change these in `server/.env` before using beyond local testing.
+Use a private password before sharing the app on your network.
 
 ## Environment Variables
 
@@ -90,7 +92,7 @@ CLIENT_ORIGIN=http://localhost:5173
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
+ADMIN_PASSWORD=choose-a-private-password
 ```
 
 Frontend, `client/.env`:
