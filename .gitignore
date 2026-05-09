@@ -5,6 +5,7 @@ server/node_modules/
 client/dist/
 server/*.sqlite
 server/*.log
+server/uploads/
 *.log
 
 .env

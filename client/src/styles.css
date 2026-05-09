@@ -110,6 +110,7 @@ a {
 
 .hero-copy h1,
 .section-heading h2,
+.gallery-section h2,
 .booking-section h2,
 .contact-section h2,
 .dashboard h1 {
@@ -188,7 +189,9 @@ a {
 }
 
 .section,
+.gallery-section,
 .booking-section,
+.map-section,
 .contact-section,
 .dashboard {
   padding: 34px 18px;
@@ -199,6 +202,7 @@ a {
 }
 
 .section-heading h2,
+.gallery-section h2,
 .booking-section h2,
 .contact-section h2 {
   font-size: 2rem;
@@ -212,6 +216,10 @@ a {
 .service-card,
 .appointment-card,
 .summary-card,
+.gallery-admin-card,
+.map-panel,
+.reviews-panel,
+.review-card,
 .admin-form,
 .settings-form {
   background: #fff;
@@ -249,6 +257,104 @@ a {
   color: #8a6973;
   font-size: 0.9rem;
   margin-top: 14px;
+}
+
+.gallery-section {
+  background: #fff;
+  display: grid;
+  gap: 18px;
+}
+
+.gallery-carousel {
+  border-radius: 8px;
+  min-height: 360px;
+  overflow: hidden;
+  position: relative;
+}
+
+.gallery-track {
+  display: flex;
+  height: 100%;
+  min-height: 360px;
+  transition: transform 700ms ease;
+  width: 100%;
+}
+
+.gallery-slide {
+  flex: 0 0 100%;
+  min-height: 360px;
+  overflow: hidden;
+  position: relative;
+}
+
+.gallery-slide img,
+.gallery-slide video {
+  background: #26151e;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.gallery-slide::after {
+  background: linear-gradient(180deg, transparent 45%, rgba(38, 21, 30, 0.76));
+  content: "";
+  inset: 0;
+  position: absolute;
+}
+
+.gallery-slide div {
+  align-items: center;
+  bottom: 18px;
+  color: #fff;
+  display: flex;
+  gap: 10px;
+  left: 18px;
+  max-width: calc(100% - 36px);
+  position: absolute;
+  z-index: 1;
+}
+
+.gallery-slide span {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.gallery-slide strong {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.gallery-dots {
+  bottom: 16px;
+  display: flex;
+  gap: 8px;
+  position: absolute;
+  right: 16px;
+  z-index: 2;
+}
+
+.gallery-dots button {
+  background: rgba(255, 255, 255, 0.55);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  height: 10px;
+  padding: 0;
+  width: 10px;
+}
+
+.gallery-dots .active {
+  background: #fff;
+  width: 26px;
 }
 
 .booking-section {
@@ -315,6 +421,103 @@ textarea {
 .contact-section {
   display: grid;
   gap: 18px;
+}
+
+.map-section {
+  display: grid;
+  gap: 18px;
+}
+
+.map-reviews-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.map-panel {
+  display: grid;
+  gap: 12px;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.map-panel iframe {
+  aspect-ratio: 4 / 3;
+  border: 0;
+  border-radius: 8px;
+  min-height: 300px;
+  width: 100%;
+}
+
+.map-link {
+  align-items: center;
+  background: #fff8f6;
+  border: 1px solid #eadbd7;
+  border-radius: 8px;
+  color: #7d2742;
+  display: inline-flex;
+  font-weight: 900;
+  gap: 8px;
+  justify-content: center;
+  min-height: 46px;
+  padding: 10px 12px;
+}
+
+.reviews-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.reviews-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.reviews-summary span,
+.reviews-summary small {
+  color: #8a6973;
+  font-weight: 800;
+}
+
+.reviews-summary strong {
+  color: #7d2742;
+  font-size: 1.65rem;
+  line-height: 1.1;
+}
+
+.review-list {
+  display: grid;
+  gap: 10px;
+}
+
+.review-card {
+  box-shadow: none;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.review-heading {
+  align-items: start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.review-heading span {
+  align-items: center;
+  color: #8d2f4b;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 900;
+  gap: 5px;
+}
+
+.review-card p,
+.review-card small {
+  color: #6f5962;
+  margin: 0;
 }
 
 .contact-list {
@@ -508,6 +711,53 @@ textarea {
   gap: 14px;
 }
 
+.gallery-manager {
+  display: grid;
+  gap: 14px;
+}
+
+.gallery-admin-list {
+  display: grid;
+  gap: 10px;
+}
+
+.gallery-admin-card {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 86px 1fr 46px;
+  padding: 10px;
+}
+
+.gallery-admin-card img,
+.gallery-admin-card video {
+  aspect-ratio: 1;
+  background: #26151e;
+  border-radius: 8px;
+  object-fit: cover;
+  width: 86px;
+}
+
+.gallery-admin-card div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gallery-admin-card strong,
+.gallery-admin-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-admin-card span {
+  color: #8a6973;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
 .tabs {
   background: #f4e7e1;
   border-radius: 8px;
@@ -642,7 +892,9 @@ textarea {
   .dashboard-header,
   .hero-section,
   .section,
+  .gallery-section,
   .booking-section,
+  .map-section,
   .contact-section,
   .dashboard {
     padding-left: max(34px, calc((100vw - 1120px) / 2));
@@ -672,6 +924,21 @@ textarea {
     grid-template-columns: repeat(4, 1fr);
   }
 
+  .gallery-carousel,
+  .gallery-track,
+  .gallery-slide {
+    min-height: 560px;
+  }
+
+  .map-reviews-grid {
+    align-items: start;
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  }
+
+  .map-panel iframe {
+    aspect-ratio: 16 / 10;
+  }
+
   .form-row,
   .appointment-card {
     grid-template-columns: 1fr 1fr;
@@ -679,6 +946,15 @@ textarea {
 
   .admin-columns {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .gallery-manager {
+    align-items: start;
+    grid-template-columns: minmax(280px, 0.55fr) minmax(0, 1.45fr);
+  }
+
+  .gallery-admin-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .form-actions {

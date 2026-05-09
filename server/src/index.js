@@ -1,24 +1,50 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
+import multer from 'multer';
 import { createAppointment, db, getBusinessSettings, initDb } from './db.js';
 import { handleChatMessage } from './chat.js';
+import { listGoogleReviews } from './googleBusiness.js';
+import { sendAppointmentNotification } from './notifications.js';
 
 await initDb();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, '..', '..', 'client', 'dist');
+const uploadsPath = path.resolve(__dirname, '..', 'uploads');
 
 const app = express();
 const port = process.env.PORT || 5050;
 const adminSessionToken = process.env.ADMIN_SESSION_TOKEN || randomBytes(32).toString('hex');
 
+fs.mkdirSync(uploadsPath, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadsPath,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${Date.now()}-${randomBytes(8).toString('hex')}${ext}`);
+    }
+  }),
+  limits: { fileSize: Number(process.env.GALLERY_UPLOAD_MAX_MB || 80) * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('Only image and video uploads are allowed.'));
+  }
+});
+
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
 app.use(express.json());
+app.use('/uploads', express.static(uploadsPath));
 
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -101,6 +127,9 @@ app.post('/appointments', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Name, phone, service, date, and time are required.' });
   }
   const appointment = await createAppointment({ name, phone, serviceId, date, time, notes });
+  sendAppointmentNotification(appointment).catch((error) => {
+    console.error('Appointment email notification failed:', error.message);
+  });
   res.status(201).json(appointment);
 }));
 
@@ -125,6 +154,33 @@ app.post('/staff', requireAdmin, asyncHandler(async (req, res) => {
   const result = await db.run('INSERT INTO staff (name, role, phone) VALUES (?, ?, ?)', [name, role, phone || null]);
   const staff = await db.get('SELECT * FROM staff WHERE id = ?', [result.lastID]);
   res.status(201).json(staff);
+}));
+
+app.get('/gallery', asyncHandler(async (_req, res) => {
+  const media = await db.all('SELECT * FROM gallery_media WHERE active = 1 ORDER BY created_at DESC, id DESC');
+  res.json(media);
+}));
+
+app.post('/gallery', requireAdmin, upload.single('media'), asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Choose an image or video to upload.' });
+
+  const mediaType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
+  const title = String(req.body.title || '').trim();
+  const mediaUrl = `/uploads/${req.file.filename}`;
+  const result = await db.run(
+    'INSERT INTO gallery_media (title, media_type, url, original_name) VALUES (?, ?, ?, ?)',
+    [title || null, mediaType, mediaUrl, req.file.originalname]
+  );
+  const item = await db.get('SELECT * FROM gallery_media WHERE id = ?', [result.lastID]);
+  res.status(201).json(item);
+}));
+
+app.delete('/gallery/:id', requireAdmin, asyncHandler(async (req, res) => {
+  const item = await db.get('SELECT * FROM gallery_media WHERE id = ? AND active = 1', [req.params.id]);
+  if (!item) return res.status(404).json({ error: 'Gallery item not found.' });
+
+  await db.run('UPDATE gallery_media SET active = 0 WHERE id = ?', [req.params.id]);
+  res.json({ ok: true, id: Number(req.params.id), title: item.title, url: item.url });
 }));
 
 app.post('/chat/message', asyncHandler(async (req, res) => {
@@ -167,7 +223,7 @@ app.patch('/business-settings', requireAdmin, asyncHandler(async (req, res) => {
   await db.run(
     `UPDATE business_settings
      SET parlour_name = ?, phone_number = ?, whatsapp_link = ?, instagram_link = ?,
-         address = ?, opening_hours = ?, updated_at = CURRENT_TIMESTAMP
+         address = ?, opening_hours = ?, google_maps_url = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = 1`,
     [
       next.parlour_name.trim(),
@@ -175,10 +231,15 @@ app.patch('/business-settings', requireAdmin, asyncHandler(async (req, res) => {
       next.whatsapp_link.trim(),
       next.instagram_link.trim(),
       next.address.trim(),
-      next.opening_hours.trim()
+      next.opening_hours.trim(),
+      String(next.google_maps_url || '').trim()
     ]
   );
   res.json(await getBusinessSettings());
+}));
+
+app.get('/google-reviews', asyncHandler(async (_req, res) => {
+  res.json(await listGoogleReviews());
 }));
 
 app.post('/admin/login', (req, res) => {

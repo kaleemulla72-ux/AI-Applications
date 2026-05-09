@@ -7,11 +7,16 @@ Mobile-first beauty parlour MVP with a React customer website, floating AI chat 
 - Customer homepage with services, prices, duration, descriptions, contact details, WhatsApp link, and Instagram link
 - Floating AI receptionist chat widget
 - Appointment booking form
+- Auto-sliding image and video gallery
 - Admin login page
 - Admin appointment dashboard with all/today filters and status updates
 - Admin summary cards for today's bookings, upcoming bookings, expected revenue, and cancelled bookings
 - Service and staff management
+- Admin gallery uploads for images and videos
 - Business settings editor
+- Google Map section on the customer site
+- Google Business Profile reviews feed when API credentials are configured
+- Owner email alerts for new appointments when SMTP is configured
 - SQLite database seeded with sample beauty parlour services
 
 ## Tech Stack
@@ -56,6 +61,14 @@ Mobile-first beauty parlour MVP with a React customer website, floating AI chat 
    ADMIN_PASSWORD=choose-a-private-password
    OPENAI_API_KEY=your_api_key_here
    OPENAI_MODEL=gpt-4o-mini
+   GOOGLE_BUSINESS_ACCOUNT_ID=your_google_business_account_id
+   GOOGLE_BUSINESS_LOCATION_ID=your_google_business_location_id
+   GOOGLE_BUSINESS_CLIENT_ID=your_google_oauth_client_id
+   GOOGLE_BUSINESS_CLIENT_SECRET=your_google_oauth_client_secret
+   GOOGLE_BUSINESS_REFRESH_TOKEN=your_google_oauth_refresh_token
+   SMTP_USER=your_email@gmail.com
+   SMTP_PASS=your_email_app_password
+   APPOINTMENT_ALERT_EMAIL=owner_email@example.com
    ```
 
    The app still runs without `OPENAI_API_KEY`, but chat replies use the built-in local receptionist fallback.
@@ -93,6 +106,38 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=choose-a-private-password
+GOOGLE_BUSINESS_ACCOUNT_ID=
+GOOGLE_BUSINESS_LOCATION_ID=
+GOOGLE_BUSINESS_CLIENT_ID=
+GOOGLE_BUSINESS_CLIENT_SECRET=
+GOOGLE_BUSINESS_REFRESH_TOKEN=
+GOOGLE_BUSINESS_ACCESS_TOKEN=
+GOOGLE_BUSINESS_REVIEW_PAGE_SIZE=8
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM=
+APPOINTMENT_ALERT_EMAIL=
+GALLERY_UPLOAD_MAX_MB=80
+```
+
+Google reviews use the Google Business Profile Reviews API:
+`GET https://mybusiness.googleapis.com/v4/accounts/{accountId}/locations/{locationId}/reviews`.
+The location must be verified, and OAuth must include the `https://www.googleapis.com/auth/business.manage` scope.
+Use either a refresh-token setup or a short-lived `GOOGLE_BUSINESS_ACCESS_TOKEN` for testing.
+
+Email appointment alerts are optional. For Gmail, use an app password instead of your normal Gmail password, then set:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_gmail_app_password
+SMTP_FROM=your_email@gmail.com
+APPOINTMENT_ALERT_EMAIL=owner_email@example.com
 ```
 
 Frontend, `client/.env`:
@@ -111,7 +156,11 @@ VITE_API_URL=http://localhost:5050
 - `PATCH /appointments/:id/status`
 - `GET /staff`
 - `POST /staff`
+- `GET /gallery`
+- `POST /gallery`
+- `DELETE /gallery/:id`
 - `POST /chat/message`
+- `GET /google-reviews`
 - `GET /dashboard/summary`
 - `GET /business-settings`
 - `PATCH /business-settings`

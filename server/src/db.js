@@ -73,13 +73,34 @@ export async function initDb() {
       instagram_link TEXT NOT NULL,
       address TEXT NOT NULL,
       opening_hours TEXT NOT NULL,
+      google_maps_url TEXT,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS gallery_media (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      media_type TEXT NOT NULL,
+      url TEXT NOT NULL,
+      original_name TEXT,
+      active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  await ensureBusinessSettingsColumns();
 
   await seedServices();
   await seedStaff();
   await seedBusinessSettings();
+}
+
+async function ensureBusinessSettingsColumns() {
+  const columns = await db.all('PRAGMA table_info(business_settings)');
+  const names = new Set(columns.map((column) => column.name));
+  if (!names.has('google_maps_url')) {
+    await db.run('ALTER TABLE business_settings ADD COLUMN google_maps_url TEXT');
+  }
 }
 
 async function seedServices() {
@@ -116,16 +137,17 @@ async function seedStaff() {
 async function seedBusinessSettings() {
   await db.run(
     `INSERT OR IGNORE INTO business_settings
-      (id, parlour_name, phone_number, whatsapp_link, instagram_link, address, opening_hours)
+      (id, parlour_name, phone_number, whatsapp_link, instagram_link, address, opening_hours, google_maps_url)
      VALUES
-      (1, ?, ?, ?, ?, ?, ?)`,
+      (1, ?, ?, ?, ?, ?, ?, ?)`,
     [
       'Linaz Beauty Parlour',
       '+91 98765 43210',
       'https://wa.me/919876543210',
       'https://instagram.com/linazbeautyparlour',
       'Main Road, Hyderabad, Telangana',
-      'Mon-Sat: 10:00 AM - 8:00 PM, Sun: 11:00 AM - 5:00 PM'
+      'Mon-Sat: 10:00 AM - 8:00 PM, Sun: 11:00 AM - 5:00 PM',
+      'https://maps.app.goo.gl/VqzRGafkd6t3LWMVA'
     ]
   );
 }

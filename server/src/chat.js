@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { createAppointment, db, getBusinessSettings } from './db.js';
+import { sendAppointmentNotification } from './notifications.js';
 
 const systemPrompt = `You are an AI receptionist for a beauty parlour. Help customers with service details, pricing, packages, appointment booking, rescheduling, cancellation, and feedback. Be polite, friendly, professional, and concise. Always collect customer name, phone number, service, date, and time before creating a booking. Do not confirm unavailable slots. If price or availability is unclear, say the owner will confirm. Do not give medical or skin treatment guarantees.`;
 
@@ -37,6 +38,9 @@ export async function handleChatMessage({ sessionId, message }) {
         date: extracted.date,
         time: extracted.time,
         notes: 'Created from AI chat'
+      });
+      sendAppointmentNotification(appointment).catch((error) => {
+        console.error('Appointment email notification failed:', error.message);
       });
       const reply = `Thank you, ${appointment.customer_name}. I created your ${appointment.service_name} booking for ${appointment.date} at ${appointment.time}. It is pending now, and the owner will confirm if any adjustment is needed.`;
       await saveAssistantReply(sessionId, reply);

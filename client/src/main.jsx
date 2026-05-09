@@ -4,16 +4,20 @@ import {
   CalendarCheck,
   Check,
   Clock,
+  ExternalLink,
+  ImagePlus,
   Pencil,
   Trash2,
   Instagram,
-  LayoutDashboard,
+  MapPin,
   MessageCircle,
   Phone,
   Plus,
+  Play,
   Scissors,
   Send,
   Sparkles,
+  Star,
   UserRound,
   X
 } from 'lucide-react';
@@ -28,10 +32,35 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function getGoogleMapsEmbedUrl(settings) {
+  if (settings?.google_maps_url?.includes('/maps/embed')) return settings.google_maps_url;
+  if (settings?.google_maps_url?.includes('output=embed')) return settings.google_maps_url;
+  const query = encodeURIComponent(`${settings?.parlour_name || 'Linaz Beauty Parlour'} ${settings?.address || ''}`);
+  return `https://www.google.com/maps?q=${query}&output=embed`;
+}
+
+function formatGoogleRating(rating) {
+  const ratingMap = {
+    ONE: '1',
+    TWO: '2',
+    THREE: '3',
+    FOUR: '4',
+    FIVE: '5'
+  };
+  return ratingMap[rating] || 'Rating';
+}
+
+function mediaUrl(url) {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${API_URL}${url}`;
+}
+
 async function api(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) },
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Request failed');
@@ -39,25 +68,45 @@ async function api(path, options = {}) {
 }
 
 function App() {
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(window.location.hash === '#admin' ? 'admin' : 'home');
+
+  function showAdmin() {
+    window.location.hash = 'admin';
+    setView('admin');
+  }
+
+  function showHome() {
+    window.location.hash = '';
+    setView('home');
+  }
+
   return (
     <>
-      {view === 'home' ? <CustomerApp onAdmin={() => setView('admin')} /> : <AdminApp onHome={() => setView('home')} />}
+      {view === 'home' ? <CustomerApp /> : <AdminApp onHome={showHome} />}
     </>
   );
 }
 
-function CustomerApp({ onAdmin }) {
+function CustomerApp() {
   const [services, setServices] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [reviews, setReviews] = useState(null);
+  const [gallery, setGallery] = useState([]);
   const [booking, setBooking] = useState({ name: '', phone: '', serviceId: '', date: '', time: '', notes: '' });
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
-    Promise.all([api('/services'), api('/business-settings')])
-      .then(([serviceData, settingData]) => {
+    Promise.all([
+      api('/services'),
+      api('/business-settings'),
+      api('/gallery').catch(() => []),
+      api('/google-reviews').catch((error) => ({ error: error.message, reviews: [] }))
+    ])
+      .then(([serviceData, settingData, galleryData, reviewData]) => {
         setServices(serviceData);
         setSettings(settingData);
+        setGallery(galleryData);
+        setReviews(reviewData);
         setBooking((current) => ({ ...current, serviceId: serviceData[0]?.id || '' }));
       })
       .catch((error) => setNotice(error.message));
@@ -86,13 +135,11 @@ function CustomerApp({ onAdmin }) {
           <span>{settings?.parlour_name || 'Linaz Beauty Parlour'}</span>
         </a>
         <nav>
+          <a href="#gallery">Gallery</a>
           <a href="#services">Services</a>
           <a href="#book">Book</a>
+          <a href="#map">Map</a>
           <a href="#contact">Contact</a>
-          <button className="ghost-button" onClick={onAdmin}>
-            <LayoutDashboard size={17} />
-            Admin
-          </button>
         </nav>
       </header>
 
@@ -122,6 +169,8 @@ function CustomerApp({ onAdmin }) {
             </div>
           </div>
         </section>
+
+        <GallerySection items={gallery} />
 
         <section className="section" id="services">
           <div className="section-heading">
@@ -162,6 +211,8 @@ function CustomerApp({ onAdmin }) {
           </form>
         </section>
 
+        <MapReviewsSection settings={settings} reviews={reviews} />
+
         <section className="contact-section" id="contact">
           <div>
             <p className="eyebrow">Contact</p>
@@ -189,6 +240,120 @@ function SocialBar({ settings }) {
       <a href={settings.whatsapp_link} target="_blank" rel="noreferrer"><MessageCircle size={19} /> WhatsApp</a>
       <a href={settings.instagram_link} target="_blank" rel="noreferrer"><Instagram size={19} /> Instagram</a>
     </div>
+  );
+}
+
+function GallerySection({ items }) {
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (items.length <= 1) return undefined;
+    const timer = window.setInterval(() => {
+      setActive((current) => (current + 1) % items.length);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [items.length]);
+
+  useEffect(() => {
+    setActive(0);
+  }, [items.length]);
+
+  if (!items.length) return null;
+
+  return (
+    <section className="gallery-section" id="gallery">
+      <div className="section-heading">
+        <p className="eyebrow">Gallery</p>
+        <h2>Recent Work</h2>
+      </div>
+      <div className="gallery-carousel">
+        <div className="gallery-track" style={{ transform: `translateX(-${active * 100}%)` }}>
+          {items.map((item) => (
+            <article className="gallery-slide" key={item.id}>
+              {item.media_type === 'video' ? (
+                <video src={mediaUrl(item.url)} muted loop playsInline autoPlay controls={false} />
+              ) : (
+                <img src={mediaUrl(item.url)} alt={item.title || 'Gallery work'} />
+              )}
+              <div>
+                <span>{item.media_type === 'video' ? <Play size={16} /> : <ImagePlus size={16} />}</span>
+                <strong>{item.title || 'Linaz Beauty Parlour'}</strong>
+              </div>
+            </article>
+          ))}
+        </div>
+        {items.length > 1 && (
+          <div className="gallery-dots" aria-label="Gallery slides">
+            {items.map((item, index) => (
+              <button
+                className={index === active ? 'active' : ''}
+                key={item.id}
+                type="button"
+                aria-label={`Show gallery item ${index + 1}`}
+                onClick={() => setActive(index)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MapReviewsSection({ settings, reviews }) {
+  const mapUrl = getGoogleMapsEmbedUrl(settings);
+  const mapsLink = settings?.google_maps_url
+    || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${settings?.parlour_name || ''} ${settings?.address || ''}`)}`;
+  const reviewItems = reviews?.reviews || [];
+
+  return (
+    <section className="map-section" id="map">
+      <div className="section-heading">
+        <p className="eyebrow">Google</p>
+        <h2>Map & Reviews</h2>
+      </div>
+      <div className="map-reviews-grid">
+        <div className="map-panel">
+          <iframe
+            title={`${settings?.parlour_name || 'Business'} location on Google Maps`}
+            src={mapUrl}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+          <a className="map-link" href={mapsLink} target="_blank" rel="noreferrer">
+            <MapPin size={18} />
+            Open in Google Maps
+            <ExternalLink size={15} />
+          </a>
+        </div>
+
+        <div className="reviews-panel">
+          <div className="reviews-summary">
+            <span>Google Reviews</span>
+            <strong>{reviews?.averageRating ? `${Number(reviews.averageRating).toFixed(1)} / 5` : 'Live reviews'}</strong>
+            <small>{reviews?.totalReviewCount ? `${reviews.totalReviewCount} reviews` : 'Connected to your Google Business Profile when configured'}</small>
+          </div>
+          <div className="review-list">
+            {!reviews && <p className="empty-state">Loading reviews...</p>}
+            {reviews?.error && <p className="empty-state">{reviews.error}</p>}
+            {reviews && !reviews.configured && (
+              <p className="empty-state">Add Google Business Profile credentials on the server to show account reviews here.</p>
+            )}
+            {reviews?.configured && !reviewItems.length && <p className="empty-state">No Google reviews returned yet.</p>}
+            {reviewItems.map((review) => (
+              <article className="review-card" key={review.id}>
+                <div className="review-heading">
+                  <strong>{review.name}</strong>
+                  <span><Star size={15} /> {formatGoogleRating(review.starRating)}</span>
+                </div>
+                {review.comment && <p>{review.comment}</p>}
+                {review.reply && <small>Owner replied: {review.reply}</small>}
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -283,11 +448,12 @@ function AdminLogin({ onLogin, onHome }) {
 }
 
 function Dashboard({ adminToken, onHome, onLogout }) {
-  const settingFields = ['parlour_name', 'phone_number', 'whatsapp_link', 'instagram_link', 'address', 'opening_hours'];
+  const settingFields = ['parlour_name', 'phone_number', 'whatsapp_link', 'instagram_link', 'address', 'opening_hours', 'google_maps_url'];
   const [appointments, setAppointments] = useState([]);
   const [summary, setSummary] = useState(null);
   const [services, setServices] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [gallery, setGallery] = useState([]);
   const [settings, setSettings] = useState(null);
   const [settingsDraft, setSettingsDraft] = useState(null);
   const [newService, setNewService] = useState({ name: '', price: '', duration: '', description: '' });
@@ -296,6 +462,7 @@ function Dashboard({ adminToken, onHome, onLogout }) {
   const [tab, setTab] = useState('all');
   const [adminNotice, setAdminNotice] = useState('');
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
 
   const adminApi = (path, options = {}) => api(path, {
     ...options,
@@ -315,12 +482,14 @@ function Dashboard({ adminToken, onHome, onLogout }) {
     adminApi('/dashboard/summary'),
     api('/services'),
     adminApi('/staff'),
+    api('/gallery'),
     api('/business-settings')
-  ]).then(([appointmentData, summaryData, serviceData, staffData, settingData]) => {
+  ]).then(([appointmentData, summaryData, serviceData, staffData, galleryData, settingData]) => {
     setAppointments(appointmentData);
     setSummary(summaryData);
     setServices(serviceData);
     setStaff(staffData);
+    setGallery(galleryData);
     setSettings(settingData);
     setSettingsDraft(settingData);
   });
@@ -437,6 +606,38 @@ function Dashboard({ adminToken, onHome, onLogout }) {
     }
   }
 
+  async function uploadGalleryItem(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setGalleryUploading(true);
+    setAdminNotice('Uploading gallery item...');
+    try {
+      const formData = new FormData(form);
+      const item = await adminApi('/gallery', {
+        method: 'POST',
+        body: formData
+      });
+      form.reset();
+      setAdminNotice(`Gallery item uploaded: ${item.title || item.original_name}`);
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    } finally {
+      setGalleryUploading(false);
+    }
+  }
+
+  async function deleteGalleryItem(item) {
+    if (!window.confirm(`Remove ${item.title || item.original_name || 'this gallery item'} from the gallery?`)) return;
+    try {
+      await adminApi(`/gallery/${item.id}`, { method: 'DELETE' });
+      setAdminNotice('Gallery item removed.');
+      await load();
+    } catch (error) {
+      handleAdminError(error);
+    }
+  }
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -529,6 +730,38 @@ function Dashboard({ adminToken, onHome, onLogout }) {
           <button type="submit"><UserRound size={17} /> Add Staff</button>
           <div className="mini-list">{staff.map((member) => <span key={member.id}>{member.name} · {member.role}</span>)}</div>
         </form>
+      </section>
+
+      <section className="gallery-manager">
+        <form className="admin-form" onSubmit={uploadGalleryItem}>
+          <h2>Gallery Uploads</h2>
+          <input name="title" placeholder="Title or caption" />
+          <input required name="media" type="file" accept="image/*,video/*" />
+          <button type="submit" disabled={galleryUploading}>
+            <ImagePlus size={17} />
+            {galleryUploading ? 'Uploading...' : 'Upload Media'}
+          </button>
+        </form>
+
+        <div className="gallery-admin-list">
+          {gallery.map((item) => (
+            <article className="gallery-admin-card" key={item.id}>
+              {item.media_type === 'video' ? (
+                <video src={mediaUrl(item.url)} muted playsInline />
+              ) : (
+                <img src={mediaUrl(item.url)} alt={item.title || item.original_name || 'Gallery item'} />
+              )}
+              <div>
+                <strong>{item.title || item.original_name || 'Gallery item'}</strong>
+                <span>{item.media_type}</span>
+              </div>
+              <button className="icon-danger-button" type="button" aria-label="Remove gallery item" onClick={() => deleteGalleryItem(item)}>
+                <Trash2 size={16} />
+              </button>
+            </article>
+          ))}
+          {!gallery.length && <p className="empty-state">No gallery media uploaded yet.</p>}
+        </div>
       </section>
 
       {settingsDraft && (
