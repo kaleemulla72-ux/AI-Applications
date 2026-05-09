@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: linaz-beauty-parlour
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run install:all && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    disk:
+      name: linaz-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: DB_PATH
+        value: /opt/render/project/src/server/data/beauty-parlour.sqlite
+      - key: UPLOADS_PATH
+        value: /opt/render/project/src/server/data/uploads
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: GOOGLE_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: GOOGLE_BUSINESS_LOCATION_ID
+        sync: false
+      - key: GOOGLE_BUSINESS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_BUSINESS_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_BUSINESS_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_BUSINESS_ACCESS_TOKEN
+        sync: false
+      - key: GOOGLE_BUSINESS_REVIEW_PAGE_SIZE
+        value: 8
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_SECURE
+        value: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: APPOINTMENT_ALERT_EMAIL
+        sync: false
+      - key: GALLERY_UPLOAD_MAX_MB
+        value: 80

@@ -84,6 +84,44 @@ Mobile-first beauty parlour MVP with a React customer website, floating AI chat 
    - Customer app: `http://localhost:5173`
    - Backend API: `http://localhost:5050`
 
+## Deploy Publicly
+
+This repo includes a Render Blueprint in `render.yaml`. The app should be deployed as a Node web service, not as a static-only site, because bookings, admin login, gallery uploads, email alerts, SQLite, and Google reviews all run through the Express server.
+
+1. Commit and push this repo to GitHub.
+2. In Render, choose **New > Blueprint** and connect this GitHub repo.
+3. Render will read `render.yaml`, create the web service, and attach a 1 GB persistent disk at `/opt/render/project/src/server/data`.
+4. Fill the secret environment variables in Render when prompted:
+
+   ```env
+   CLIENT_ORIGIN=https://your-render-url-or-domain
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=choose-a-strong-private-password
+   SMTP_USER=your_email@gmail.com
+   SMTP_PASS=your_gmail_app_password
+   SMTP_FROM=your_email@gmail.com
+   APPOINTMENT_ALERT_EMAIL=owner_email@example.com
+   ```
+
+5. Optional values can stay blank until you configure them:
+
+   ```env
+   OPENAI_API_KEY=
+   GOOGLE_BUSINESS_ACCOUNT_ID=
+   GOOGLE_BUSINESS_LOCATION_ID=
+   GOOGLE_BUSINESS_CLIENT_ID=
+   GOOGLE_BUSINESS_CLIENT_SECRET=
+   GOOGLE_BUSINESS_REFRESH_TOKEN=
+   GOOGLE_BUSINESS_ACCESS_TOKEN=
+   ```
+
+6. After deploy, open:
+
+   - Customer site: `https://your-render-url-or-domain`
+   - Admin login: `https://your-render-url-or-domain/admin`
+
+Render persistent disks are needed for SQLite and uploaded gallery media. Without a persistent disk, bookings and uploads can be lost on redeploys or restarts.
+
 ## Admin Login
 
 Admin credentials are configured in your local `server/.env` file:
@@ -102,6 +140,8 @@ Backend, `server/.env`:
 ```env
 PORT=5050
 CLIENT_ORIGIN=http://localhost:5173
+DB_PATH=
+UPLOADS_PATH=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 ADMIN_USERNAME=admin
@@ -122,6 +162,8 @@ SMTP_FROM=
 APPOINTMENT_ALERT_EMAIL=
 GALLERY_UPLOAD_MAX_MB=80
 ```
+
+For production, set `CLIENT_ORIGIN` to your public website URL. If your host uses persistent disks, set `DB_PATH` to the persistent SQLite path and `UPLOADS_PATH` to the persistent upload folder.
 
 Google reviews use the Google Business Profile Reviews API:
 `GET https://mybusiness.googleapis.com/v4/accounts/{accountId}/locations/{locationId}/reviews`.
@@ -149,6 +191,7 @@ VITE_API_URL=http://localhost:5050
 ## API Endpoints
 
 - `GET /services`
+- `GET /health`
 - `POST /services`
 - `PATCH /services/:id`
 - `GET /appointments`

@@ -16,7 +16,7 @@ await initDb();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const clientDistPath = path.resolve(__dirname, '..', '..', 'client', 'dist');
-const uploadsPath = path.resolve(__dirname, '..', 'uploads');
+const uploadsPath = process.env.UPLOADS_PATH || path.resolve(__dirname, '..', 'uploads');
 
 const app = express();
 const port = process.env.PORT || 5050;
@@ -45,6 +45,10 @@ const upload = multer({
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
 app.use(express.json());
 app.use('/uploads', express.static(uploadsPath));
+
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);

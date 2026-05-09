@@ -68,17 +68,31 @@ async function api(path, options = {}) {
 }
 
 function App() {
-  const [view, setView] = useState(window.location.hash === '#admin' ? 'admin' : 'home');
+  const isAdminUrl = () => window.location.pathname === '/admin' || window.location.hash === '#admin';
+  const [view, setView] = useState(isAdminUrl() ? 'admin' : 'home');
 
   function showAdmin() {
-    window.location.hash = 'admin';
+    window.history.pushState(null, '', '/admin');
     setView('admin');
   }
 
   function showHome() {
-    window.location.hash = '';
+    window.history.pushState(null, '', '/');
     setView('home');
   }
+
+  useEffect(() => {
+    function handleNavigation() {
+      setView(isAdminUrl() ? 'admin' : 'home');
+    }
+
+    window.addEventListener('popstate', handleNavigation);
+    window.addEventListener('hashchange', handleNavigation);
+    return () => {
+      window.removeEventListener('popstate', handleNavigation);
+      window.removeEventListener('hashchange', handleNavigation);
+    };
+  }, []);
 
   return (
     <>
